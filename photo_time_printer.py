@@ -453,10 +453,16 @@ class PhotoTimestampPrinterApp(QMainWindow):
         file_path = first_item.data(Qt.ItemDataRole.UserRole)
         
         try:
-            pil_image = Image.open(file_path).convert("RGBA")
+            pil_image = Image.open(file_path)
             
+            # ここが修正箇所
+            # モノクロ設定の場合、画像をグレースケールに変換し、さらにRGBに変換する
             if self.mono_radio.isChecked():
                 pil_image = ImageOps.grayscale(pil_image)
+                pil_image = pil_image.convert("RGB") # QImageで扱いやすいようRGBに変換
+            else:
+                # カラー設定の場合、RGBAに変換
+                pil_image = pil_image.convert("RGBA")
             
             date_time_str = self.selected_photos.get(file_path, "日時不明")
             
@@ -469,7 +475,12 @@ class PhotoTimestampPrinterApp(QMainWindow):
             text_color_pil = (self.text_color.red(), self.text_color.green(), self.text_color.blue())
             draw.text((10, 10), date_time_str, font=font, fill=text_color_pil)
             
-            qimage = QImage(pil_image.tobytes(), pil_image.width, pil_image.height, pil_image.width * 4, QImage.Format.Format_RGBA8888)
+            # PILのモードに応じてQImageのフォーマットを適切に選択
+            if pil_image.mode == "RGB":
+                qimage = QImage(pil_image.tobytes(), pil_image.width, pil_image.height, pil_image.width * 3, QImage.Format.Format_RGB888)
+            else:
+                qimage = QImage(pil_image.tobytes(), pil_image.width, pil_image.height, pil_image.width * 4, QImage.Format.Format_RGBA8888)
+            
             pixmap = QPixmap.fromImage(qimage)
 
             scaled_pixmap = pixmap.scaled(
@@ -505,14 +516,11 @@ class PhotoTimestampPrinterApp(QMainWindow):
 
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         dialog = QPrintDialog(printer, self)
-        
         # 印刷ダイアログでL判が選択されたり、デフォルト設定を使用するようにします
         # 単位をmmで設定
         printer.setPageSize(QPageSize(QSizeF(89, 127), QPageSize.Unit.Millimeter))
-        # 解像度を300dpiに設定
         printer.setResolution(300)
 
-        # ログ出力: プリンター設定
         print(f"[DEBUG] プリンター設定 - 解像度: {printer.resolution()}dpi")
         print(f"[DEBUG] プリンター設定 - ページサイズ (物理): {printer.pageRect(QPrinter.Unit.Millimeter).size().width()}mm x {printer.pageRect(QPrinter.Unit.Millimeter).size().height()}mm")
         print(f"[DEBUG] プリンター設定 - 印刷可能領域 (論理): {printer.pageRect(QPrinter.Unit.Point).size().width()}pt x {printer.pageRect(QPrinter.Unit.Point).size().height()}pt")
@@ -541,11 +549,13 @@ class PhotoTimestampPrinterApp(QMainWindow):
                     # PILを使って画像を処理し、タイムスタンプを描画
                     img = Image.open(file_path)
                     
-                    if printer.colorMode() == QPrinter.ColorMode.GrayScale:
+                    # 印刷プレビューと一貫性を持たせるため、RGBに変換
+                    if self.mono_radio.isChecked():
                         img = ImageOps.grayscale(img)
+                        img = img.convert("RGB") # プレビューと同様にRGBに変換
+                    else:
+                        img = img.convert("RGBA")
                     
-                    # 印刷プレビューと一貫性を持たせるため、RGBAに変換
-                    img = img.convert("RGBA")
                     draw = ImageDraw.Draw(img)
 
                     try:
@@ -560,7 +570,11 @@ class PhotoTimestampPrinterApp(QMainWindow):
                     print(f"[DEBUG] タイムスタンプ描画完了: {date_time_str}")
 
                     # 処理済みのPIL画像をQPixmapに変換
-                    qimage = QImage(img.tobytes(), img.width, img.height, img.width * 4, QImage.Format.Format_RGBA8888)
+                    if img.mode == "RGB":
+                        qimage = QImage(img.tobytes(), img.width, img.height, img.width * 3, QImage.Format.Format_RGB888)
+                    else:
+                        qimage = QImage(img.tobytes(), img.width, img.height, img.width * 4, QImage.Format.Format_RGBA8888)
+                        
                     pixmap = QPixmap.fromImage(qimage)
                     print(f"[DEBUG] QPixmapへの変換完了. サイズ: {pixmap.size().width()}x{pixmap.size().height()}")
 
